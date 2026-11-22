@@ -26,6 +26,7 @@ class MainActivity : Activity() {
     private var apiBase = "https://api.openai.com/v1"
     private var model = "gpt-4o-mini"
     private var apiKey = ""
+    private var userMemory = ""
     private val backgroundColor = Color.rgb(18, 18, 24)
     private val panel = Color.rgb(31, 31, 42)
     private val accent = Color.rgb(255, 190, 65)
@@ -37,6 +38,11 @@ class MainActivity : Activity() {
             apiBase = it.optString("base", apiBase)
             model = it.optString("model", model)
             apiKey = it.optString("key", "")
+            userMemory = it.optString("memory", "")
+            val saved = it.optJSONArray("history")
+            if (saved != null) {
+                for (i in 0 until saved.length()) history.put(saved.getJSONObject(i))
+            }
         }
         buildScreen()
     }
@@ -59,6 +65,10 @@ class MainActivity : Activity() {
         }
         heading.addView(title, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         heading.addView(Button(this).apply {
+            text = "Memoria"
+            setOnClickListener { showMemory() }
+        })
+        heading.addView(Button(this).apply {
             text = "Modelo"
             setOnClickListener { showSettings() }
         })
@@ -80,6 +90,14 @@ class MainActivity : Activity() {
             setTextColor(textColor)
             setPadding(dp(14), dp(14), dp(14), dp(14))
             setTextIsSelectable(true)
+        }
+        if (history.length() > 0) {
+            transcript.text = "Conversación anterior restaurada desde este teléfono."
+            for (i in 0 until history.length()) {
+                val item = history.getJSONObject(i)
+                val role = item.optString("role")
+                if (role == "user" || role == "assistant") appendLine(if (role == "user") "Vos" else "Asistente", item.optString("content"))
+            }
         }
         scroll.addView(transcript)
         root.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
@@ -135,10 +153,53 @@ class MainActivity : Activity() {
                 apiBase = baseField.text.toString().trim().trimEnd('/').ifBlank { "https://api.openai.com/v1" }
                 model = modelField.text.toString().trim().ifBlank { "gpt-4o-mini" }
                 apiKey = keyField.text.toString().trim()
-                SecureSettings.save(this, JSONObject().put("base", apiBase).put("model", model).put("key", apiKey))
-                appendLine("Sistema", "Configuración guardada en este dispositivo.")
+                persistState()
+                appendLine("Sistema", "Configuración guardada cifrada en este dispositivo.")
             }
             .show()
+    }
+
+    private fun showMemory() {
+        val editor = EditText(this).apply {
+            hint = "Ej.: Respondeme en español y con pasos claros"
+            setText(userMemory)
+            minLines = 4
+            maxLines = 8
+            gravity = Gravity.TOP
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Mi memoria local")
+            .setMessage("Escribí lo que querés que el asistente recuerde. Se guarda cifrado en este teléfono y se envía al proveedor junto con tus mensajes cuando chateás.")
+            .setView(editor)
+            .setNegativeButton("Cancelar", null)
+            .setNeutralButton("Borrar memoria", null)
+            .setPositiveButton("Guardar") { _, _ ->
+                userMemory = editor.text.toString().trim()
+                persistState()
+                appendLine("Sistema", "Memoria local actualizada.")
+            }
+            .create().also { dialog ->
+                dialog.setOnShowListener {
+                    dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                        AlertDialog.Builder(this)
+                            .setMessage("¿Borrar la memoria guardada en este teléfono?")
+                            .setNegativeButton("No", null)
+                            .setPositiveButton("Borrar") { _, _ -> userMemory = ""; persistState(); dialog.dismiss(); appendLine("Sistema", "Memoria local borrada.") }
+                            .show()
+                    }
+                }
+            }.show()
+    }
+
+    private fun persistState() {
+        val settings = JSONObject()
+            .put("base", apiBase)
+            .put("model", model)
+            .put("key", apiKey)
+            .put("memory", userMemory)
+            .put("history", history)
+        SecureSettings.save(this, settings)
     }
 
     private fun field(label: String, value: String): EditText = EditText(this).apply {
@@ -160,6 +221,7 @@ class MainActivity : Activity() {
         prompt.setText("")
         appendLine("Vos", text)
         history.put(JSONObject().put("role", "user").put("content", text))
+        persistState()
         sendButton.isEnabled = false
         Thread {
             val result = runCatching { requestModel() }
@@ -167,6 +229,7 @@ class MainActivity : Activity() {
                 sendButton.isEnabled = true
                 result.onSuccess { answer ->
                     history.put(JSONObject().put("role", "assistant").put("content", answer))
+                    persistState()
                     appendLine("Asistente", answer)
                 }.onFailure { error ->
                     val message = error.message ?: "No se pudo conectar con el proveedor."
@@ -185,7 +248,14 @@ class MainActivity : Activity() {
             connection.doOutput = true
             connection.setRequestProperty("Content-Type", "application/json")
             connection.setRequestProperty("Authorization", "Bearer $apiKey")
-            val body = JSONObject().put("model", model).put("messages", history).put("stream", false)
+            val messages = JSONArray()
+            val systemPrompt = buildString {
+                append("Sos un asistente útil. Respondé en español claro. No afirmes haber realizado acciones que no ejecutaste.")
+                if (userMemory.isNotBlank()) append("\nPreferencias y datos que la persona eligió recordar: ").append(userMemory)
+            }
+            messages.put(JSONObject().put("role", "system").put("content", systemPrompt))
+            for (i in 0 until history.length()) messages.put(history.getJSONObject(i))
+            val body = JSONObject().put("model", model).put("messages", messages).put("stream", false)
                 .toString().toByteArray(Charsets.UTF_8)
             connection.outputStream.use { it.write(body) }
             val status = connection.responseCode
