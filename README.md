@@ -5,7 +5,8 @@ App Android nueva para unir una experiencia de asistente general en español con
 ## Estado real
 
 - En construcción; no hay APK publicada ni probada en un teléfono.
-- Primer hito: app Android con chat mediante un proveedor compatible con la API de chat de OpenAI y configuración local del proveedor.
+- Chat básico: app Android con endpoint compatible con OpenAI Chat Completions y proveedor configurable.
+- Memoria editable e historial: se guardan cifrados localmente con Android Keystore; el contenido de la memoria se envía al modelo junto con la conversación.
 - El control de otras apps todavía no está implementado. Se diseñará como módulo optativo, activado por la persona desde Android y limitado por permisos; no se dará por integrado hasta construirlo y probarlo.
 - El modelo no viene incluido: la inferencia depende de la conexión, del proveedor elegido y de los límites o costos de su servicio. No promete IA ilimitada gratis ni ejecución offline.
 
