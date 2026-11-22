@@ -26,7 +26,7 @@ class MainActivity : Activity() {
     private var apiBase = "https://api.openai.com/v1"
     private var model = "gpt-4o-mini"
     private var apiKey = ""
-    private val background = Color.rgb(18, 18, 24)
+    private val backgroundColor = Color.rgb(18, 18, 24)
     private val panel = Color.rgb(31, 31, 42)
     private val accent = Color.rgb(255, 190, 65)
     private val textColor = Color.rgb(245, 245, 248)
@@ -44,7 +44,7 @@ class MainActivity : Activity() {
     private fun buildScreen() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(background)
+            setBackgroundColor(backgroundColor)
             setPadding(dp(16), dp(18), dp(16), dp(12))
         }
         val heading = LinearLayout(this).apply {
@@ -79,7 +79,7 @@ class MainActivity : Activity() {
             textSize = 16f
             setTextColor(textColor)
             setPadding(dp(14), dp(14), dp(14), dp(14))
-            textIsSelectable = true
+            setTextIsSelectable(true)
         }
         scroll.addView(transcript)
         root.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
